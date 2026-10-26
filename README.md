@@ -133,10 +133,31 @@ VERSION=0.24.1 ./scripts/build-bundle.sh
 4. 把两份重复的纯 Python 轮子去重成共享的 `wheels-pure/`（137 个，省 43 MB）；
 5. `sha256sum` 出 `SHA256SUMS.txt`，打 zip；
 6. 用 `uv pip install --no-index --offline --no-build --python-platform windows`
-   做一次**关闭性验证**：本地轮子若能装出完整 363 个包，说明集合没缺口。
+   做一次**关闭性验证**：本地轮子若能装出完整依赖树（363 个顶层条目，含 `dist-info`），
+   说明集合没缺口。
 
 升级流程：改 `VERSION` → 重建 → 传新 Release 资产 → 内网机器 `git pull` 后
 `.\install.ps1 -Force`。
+
+---
+
+## 验证记录（本仓库的资产是怎么验过的）
+
+在 Linux 侧用 Windows 目标平台复现，全部通过：
+
+```text
+1) 发布资产下载 + sha256   00f0703c…56353  与 README 一致
+2) sha256sum -c SHA256SUMS  OK，211/211 个轮子
+3) 关闭性（cp312）          uv pip install --no-index --offline --python-platform windows
+                            → 363 个顶层条目
+4) 关闭性（cp313）          同上 → 363 个顶层条目
+5) uv 行为                  --no-index / --offline / --no-build / --find-links / --force
+                            在 uv 0.13.5 上均有效；非目标平台只会因 tag 不匹配失败
+```
+
+未能在 Linux 上验证的部分（装到 Windows 后才能确认）：uv tool shim 落点、
+`bm install pi` 与 Pi 的注册、PowerShell 脚本的实际执行路径。脚本对这三步都做了
+存在性检查并给出可手动执行的等价命令。
 
 ---
 
