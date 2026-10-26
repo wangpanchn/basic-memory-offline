@@ -65,23 +65,32 @@ Write-Step "Locating the wheel bundle"
 
 if ($Bundle -eq "") {
     $candidate = Join-Path $ScriptRoot $ReleaseAsset
-    if (Test-Path $candidate) {
+    if (Test-Path -LiteralPath $candidate) {
         $Bundle = $candidate
-    } elseif ((Test-Path (Join-Path $ScriptRoot "wheels-pure")) -and (Test-Path (Join-Path $ScriptRoot "wheels-cp313"))) {
+    } elseif ((Test-Path -LiteralPath (Join-Path $ScriptRoot "wheels-pure")) -and (Test-Path -LiteralPath (Join-Path $ScriptRoot "wheels-cp313"))) {
         $Bundle = $ScriptRoot
     } else {
         $Bundle = $ReleaseUrl
     }
 }
 
-$WorkRoot = Join-Path $env:LOCALAPPDATA "basic-memory-offline"
+$workBase = [Environment]::GetFolderPath("LocalApplicationData")
+if ([string]::IsNullOrEmpty($workBase)) { $workBase = $env:LOCALAPPDATA }
+if ([string]::IsNullOrEmpty($workBase)) { $workBase = [System.IO.Path]::GetTempPath() }
+$WorkRoot = Join-Path $workBase "basic-memory-offline"
 $WheelRoot = Join-Path $WorkRoot "wheels-$Version"
 
-if (Test-Path $Bundle -PathType Container) {
-    $WheelRoot = (Resolve-Path $Bundle).Path
+# Test-Path on an https:// string makes PowerShell look for a drive named "https",
+# so URLs have to be classified before any filesystem check.
+$isUrl = $Bundle -match '^https?://'
+$isDir = $false
+if (-not $isUrl) { $isDir = (Test-Path -LiteralPath $Bundle -PathType Container) }
+
+if ($isDir) {
+    $WheelRoot = (Resolve-Path -LiteralPath $Bundle).Path
     Write-Ok "using extracted bundle at $WheelRoot"
 } else {
-    if (-not (Test-Path $Bundle)) {
+    if ($isUrl) {
         Write-Host "    downloading $Bundle"
         New-Item -ItemType Directory -Force -Path $WorkRoot | Out-Null
         $zipPath = Join-Path $WorkRoot $ReleaseAsset
@@ -91,14 +100,16 @@ if (Test-Path $Bundle -PathType Container) {
             Fail "cannot download the bundle. Copy $ReleaseAsset here by hand (or pass -Bundle <path>) and rerun. Original error: $($_.Exception.Message)"
         }
         $Bundle = $zipPath
+    } elseif (-not (Test-Path -LiteralPath $Bundle)) {
+        Fail "bundle not found: $Bundle"
     }
     Write-Host "    extracting $(Split-Path -Leaf $Bundle)"
-    if (Test-Path $WheelRoot) { Remove-Item -Recurse -Force $WheelRoot }
+    if (Test-Path -LiteralPath $WheelRoot) { Remove-Item -Recurse -Force $WheelRoot }
     New-Item -ItemType Directory -Force -Path $WheelRoot | Out-Null
     Expand-Archive -Path $Bundle -DestinationPath $WheelRoot -Force
-    if (Test-Path (Join-Path $WheelRoot "wheels-pure")) {
+    if (Test-Path -LiteralPath (Join-Path $WheelRoot "wheels-pure")) {
         Write-Ok "extracted to $WheelRoot"
-    } elseif (Test-Path (Join-Path $WheelRoot "basic-memory-$Version-win_amd64")) {
+    } elseif (Test-Path -LiteralPath (Join-Path $WheelRoot "basic-memory-$Version-win_amd64")) {
         $WheelRoot = Join-Path $WheelRoot "basic-memory-$Version-win_amd64"
         Write-Ok "extracted to $WheelRoot"
     } else {
@@ -107,12 +118,12 @@ if (Test-Path $Bundle -PathType Container) {
 }
 
 $PureDir = Join-Path $WheelRoot "wheels-pure"
-if (-not (Test-Path $PureDir)) { Fail "missing $PureDir" }
+if (-not (Test-Path -LiteralPath $PureDir)) { Fail "missing $PureDir" }
 
 # ------------------------------------------------------------- 2. verify checksums
 Write-Step "Verifying wheel checksums"
 $sumFile = Join-Path $WheelRoot "SHA256SUMS.txt"
-if (Test-Path $sumFile) {
+if (Test-Path -LiteralPath $sumFile) {
     $bad = 0
     foreach ($line in Get-Content $sumFile) {
         if ($line.Trim() -eq "" -or $line.StartsWith("#")) { continue }
@@ -146,7 +157,7 @@ uv is not on PATH. Install it first (GitHub access is enough):
 "@
 }
 $uvExe = $uv.Source
-Write-Ok "uv $(& $uvExe --version)"
+Write-Ok "$(& $uvExe --version)"
 
 # ---------------------------------------------------------------- 4. pick python
 Write-Step "Picking a Python interpreter"
@@ -201,7 +212,7 @@ Write-Host "    uv $($installArgs -join ' ')"
 
 $output = & $uvExe @installArgs 2>&1
 $code = $LASTEXITCODE
-$output | ForEach-Object { Write-Host "    $_" }
+$output | ForEach-Object { Write-Host ("    " + "$_") }
 if ($code -ne 0) {
     Fail "uv tool install failed (exit $code). If it complains about a missing package, the bundle is incomplete or the interpreter is not one of $($candidates -join '/' )."
 }
@@ -229,10 +240,11 @@ if ($userPath -notlike "*$toolBin*") {
 }
 $env:Path = "$env:Path;$toolBin"
 $bmExe = Join-Path $toolBin "bm.exe"
-if (Test-Path $bmExe) {
-    $verOut = & $bmExe --version 2>&1 | Select-Object -First 1
-    Write-Ok "$verOut"
+if (-not (Test-Path -LiteralPath $bmExe)) {
+    Fail "bm.exe is not at $bmExe. Run 'uv tool dir --bin' to find the shim directory and add it to PATH."
 }
+$verOut = & $bmExe --version 2>&1 | Select-Object -First 1
+Write-Ok "$verOut"
 
 # ------------------------------------------------------- 7. optional local project
 if ($ProjectName -ne "" -and $ProjectPath -ne "") {
@@ -287,6 +299,6 @@ Write-Step "Done. Next steps"
      before running anything that embeds notes.
   4. In Pi: restart, then run  /skill:basic-memory-pi-setup   (project routing)
      and for a brand new knowledge base:  /skill:memory-onboarding
-  5. `bm update` will fail here by design (it talks to PyPI). Upgrade by fetching a
+  5. 'bm update' will fail here by design (it talks to PyPI). Upgrade by fetching a
      newer bundle from the GitHub release page and rerunning this script.
 "@ | Write-Host

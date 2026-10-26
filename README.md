@@ -153,10 +153,16 @@ VERSION=0.24.1 ./scripts/build-bundle.sh
 4) 关闭性（cp313）          同上 → 363 个顶层条目
 5) uv 行为                  --no-index / --offline / --no-build / --find-links / --force
                             在 uv 0.13.5 上均有效；非目标平台只会因 tag 不匹配失败
+6) install.ps1              PowerShell 7.4.6 AST 解析零错误；在 Linux 上实跑：
+                            定位包 / 211 个校验和 / 选解释器 / 调 uv 全通，
+                            停在 Windows tag 不匹配（预期）
+7) bm install pi            临时 HOME 下 --dry-run 确认只拷本地文件 + `pi install <本地目录>`，
+                            不访问网络
 ```
 
 未能在 Linux 上验证的部分（装到 Windows 后才能确认）：uv tool shim 落点、
-`bm install pi` 与 Pi 的注册、PowerShell 脚本的实际执行路径。脚本对这三步都做了
+`bm install pi` 与 Pi 的真实注册、PowerShell 对 `\` 路径与 `%USERPROFILE%` 的展开。
+脚本对这几步都做了存在性检查，失败时给出可手动执行的等价命令。脚本对这三步都做了
 存在性检查并给出可手动执行的等价命令。
 
 ---

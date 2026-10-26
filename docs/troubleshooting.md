@@ -89,6 +89,18 @@ npm i -g @earendil-works/pi-coding-agent
 
 装好重开窗口再 `bm install pi --yes`。
 
+它做的事是：把 wheel 里内嵌的 Pi 扩展（`extensions/`、`skills/`、`skill-references/`）
+拷到 `%USERPROFILE%\.pi\agent\packages\basic-memory`，然后执行
+`pi install <那个本地目录>`——纯本地路径，不碰 npm registry。先看预案不会写任何文件：
+
+```powershell
+bm install pi --dry-run
+```
+
+### PATH 改动没生效 / `-NoPath`
+脚本用 `[Environment]::SetEnvironmentVariable(...,"User")` 写用户 PATH，对**新开的**窗口生效。
+当前窗口手工：`$env:Path += ";$env:USERPROFILE\.local\bin"`。想自己管就加 `-NoPath`。
+
 ### Pi 里看不到 `/bm-status`
 扩展注册了但没重启。退出 Pi 重进；仍然没有就查 `%USERPROFILE%\.pi\agent\packages\basic-memory\extensions\index.ts`
 是否存在，必要时 `bm install pi --yes --replace`。
